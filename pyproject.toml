@@ -1,0 +1,32 @@
+[project]
+name = "pytest-snap"
+version = "0.1.0"
+description = "A text-based snapshot testing library implemented as a pytest plugin"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Mario Theers", email = "mario.theers@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = ["pytest>=8.0.0"]
+keywords = [
+    "pytest-plugin",
+    "pytest",
+    "testing",
+    "snapshot",
+    "snapshot-testing",
+]
+classifiers = ["Framework :: Pytest"]
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.9"]
+build-backend = "uv_build"
+
+
+[project.entry-points.pytest11]
+snap = "pytest_snap.plugin"
+
+
+[tool.basedpyright]
+typeCheckingMode = "basic"
+
+[dependency-groups]
+dev = ["basedpyright>=1.31.3"]
