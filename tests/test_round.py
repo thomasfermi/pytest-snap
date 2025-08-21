@@ -1,3 +1,5 @@
+import json
+
 from pytest_snap.round import round_floats_in_text
 
 
@@ -22,6 +24,18 @@ def test_round_floats_with_time_stamp_does_no_rounding():
         round_floats_in_text("Timestamp: 2023-04-01T12:34:56.789", 2)
         == "Timestamp: 2023-04-01T12:34:56.789"
     )
+
+
+def test_round_with_list_of_timestamps_does_no_rounding():
+    ts_list = [
+        "1998-03-31T00:00:00Z",
+        "1998-04-30T00:00:00Z",
+        "1998-05-31T00:00:00Z",
+        "1998-06-30T00:00:00Z",
+        "1998-07-31T00:00:00Z",
+    ]
+    ts_list_str = json.dumps(ts_list)
+    assert round_floats_in_text(ts_list_str, 3) == ts_list_str
 
 
 def test_round_floats_with_URL_does_no_rounding():
