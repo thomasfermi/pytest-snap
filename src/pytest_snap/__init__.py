@@ -1,2 +1,3 @@
-def hello() -> str:
-    return "Hello from pytest-snap!"
+from .plugin import SnapshotFixture, snap
+
+__all__ = ["SnapshotFixture", "snap"]

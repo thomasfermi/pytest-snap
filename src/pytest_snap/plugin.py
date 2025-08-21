@@ -65,13 +65,18 @@ class SnapSession:
         pytest.fail(error_msg, pytrace=False)
 
 
-# Global session instance
-_session = SnapSession()
+class SnapshotFixture:
+    """Snapshot fixture.
 
+    Usage: def test_xxx(snap: SnapshotFixture)
+    """
 
-def snap_impl(extension: str, content: str, digits: int | None = None) -> bool:
-    """Implementation of the snap function injected into test modules."""
-    return _session.compare_or_create_snapshot(extension, content, digits)
+    def __init__(self, session: SnapSession):
+        self._session = session
+
+    def __call__(self, extension: str, content: str, digits: int | None = None) -> bool:
+        """Create or compare a snapshot."""
+        return self._session.compare_or_create_snapshot(extension, content, digits)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -84,30 +89,35 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Configure the snap plugin."""
-    _session.update_snapshots = config.getoption("--snap-update", default=False)
+def pytest_sessionstart(session):
+    """Create SnapSession and attach to config at session start."""
+    session.config._snap_session = SnapSession()
+    session.config._snap_session.update_snapshots = session.config.getoption(
+        "--snap-update", default=False
+    )
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Set up test context for snap."""
-    _session.current_test_file = str(item.fspath)
-    _session.current_test_name = item.name
+    session = item.config._snap_session  # pyright: ignore[reportAttributeAccessIssue]
+    session.current_test_file = str(item.fspath)
+    session.current_test_name = item.name
 
     # Reset counter for this specific test
     test_file_stem = Path(item.fspath).stem
     test_key = f"{test_file_stem}__{item.name}"
-    _session.snapshot_counters[test_key] = 0
+    session.snapshot_counters[test_key] = 0
 
 
 @pytest.fixture
-def snap(request):
+def snap(request) -> SnapshotFixture:
     """
     Pytest fixture for snapshot testing.
 
-    Allows tests to use `def test_xxx(snap):` and call snap(".ext", content).
+    Allows tests to use `def test_xxx(snap: SnapshotFixture)` and call snap(".ext", content).
     """
-    return snap_impl
+    session = request.config._snap_session
+    return SnapshotFixture(session)
 
 
 def _first_diff(expected: str, current: str) -> str:
