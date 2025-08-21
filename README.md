@@ -113,6 +113,17 @@ To update this snapshot, run: pytest --snap-update
 FAILED tests/unit_test.py::test_very_long - Failed: Snapshot mismatch for unit_test__test_very_long_0.txt
 ```
 
+## Type hints
+You can use a type hint for the `snap` fixture if you want to:
+
+```python
+from pytest_snap import SnapshotFixture
+
+def test_api_response(snap : SnapshotFixture):
+    assert snap(".json", json.dumps({"message": "Hello"}))
+```
+
+
 ## Optional feature: Rounding floating point numbers
 The `snap` fixture has an optional argument `digits` which allows you to round all floats within your snapshot string to `digits` significant digits.
 
