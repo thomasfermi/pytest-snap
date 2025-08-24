@@ -3,57 +3,89 @@ import re
 
 def round_floats_in_text(content: str, digits: int) -> str:
     """
-    Rounds all floats in the given string to the specified number of significant digits.
-    Avoids altering IP-like sequences, timestamps, and URLs.
+    Round floating point numbers in text to specified significant digits.
+
+    Avoids rounding numbers that are part of:
+    - IP addresses
+    - Semantic versions
+    - Timestamps/dates
+    - URLs
+    - Plain integers
+
+    Note that this is a simple heuristic which will work well for many cases, but certainly not for all.
+    Written by Claude Sonnet 4.0.
     """
 
-    # Detect IPv4 addresses
-    ip_pattern = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    # Pattern to match floating point numbers (including scientific notation)
+    # This matches:
+    # - Optional minus sign
+    # - One or more digits
+    # - Optional decimal point followed by digits
+    # - Optional scientific notation (e/E followed by optional +/- and digits)
+    float_pattern = r"-?\d+\.?\d*(?:[eE][+-]?\d+)?"
 
-    # Detect ISO8601-like timestamps (with optional Z or offset)
-    timestamp_pattern = re.compile(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
-    )
+    def should_skip_rounding(match, full_text, start_pos, end_pos):
+        """Check if this number should be skipped from rounding."""
 
-    # Detect URLs (http or https)
-    url_pattern = re.compile(r"https?://[^\s]+", re.IGNORECASE)
+        # Check if it's actually a plain integer (no decimal point or scientific notation)
+        number_text = match.group(0)
+        if "." not in number_text and "e" not in number_text.lower():
+            return True
 
-    placeholders = []
+        # Find all IP addresses and check if our match overlaps
+        ip_pattern = r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"
+        for ip_match in re.finditer(ip_pattern, full_text):
+            # Check if our number is part of this IP address
+            if start_pos >= ip_match.start() and end_pos <= ip_match.end():
+                return True
 
-    def placeholder_replacer(match) -> str:
-        placeholders.append(match.group(0))
-        return f"__PLACEHOLDER_{len(placeholders) - 1}__"
+        # Find all semantic versions and check if our match overlaps
+        semver_pattern = r"\b\d+\.\d+\.\d+\b"
+        for semver_match in re.finditer(semver_pattern, full_text):
+            # Check if our number is part of this semver
+            if start_pos >= semver_match.start() and end_pos <= semver_match.end():
+                return True
 
-    # Temporarily replace IPs, timestamps, and URLs with placeholders
-    content_safe = ip_pattern.sub(placeholder_replacer, content)
-    content_safe = timestamp_pattern.sub(placeholder_replacer, content_safe)
-    content_safe = url_pattern.sub(placeholder_replacer, content_safe)
+        # Find all timestamps/dates and check if our match overlaps
+        timestamp_patterns = [
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",  # ISO timestamp
+            r"\d{4}-\d{2}-\d{2}",  # Date
+            r"\d{2}:\d{2}:\d{2}(?:\.\d+)?",  # Time
+        ]
+        for pattern in timestamp_patterns:
+            for ts_match in re.finditer(pattern, full_text):
+                # Check if our number is part of this timestamp
+                if start_pos >= ts_match.start() and end_pos <= ts_match.end():
+                    return True
 
-    # Regex: match numbers (floats or scientific notation)
-    number_pattern = re.compile(
-        r"""
-        (?<![\w.])            # not preceded by word char or dot
-        (                      # start group for number
-            (?:\d*\.\d+|\d+\.\d*|\d+)  # decimals or integers
-            (?:[eE][+-]?\d+)?  # optional exponent
-        )
-        (?![\w.])             # not followed by word char or dot
-    """,
-        re.VERBOSE,
-    )
+        # Find all URLs and check if our match overlaps
+        url_pattern = r"https?://[^\s]+"
+        for url_match in re.finditer(url_pattern, full_text):
+            # Check if our number is part of this URL
+            if start_pos >= url_match.start() and end_pos <= url_match.end():
+                return True
 
-    def replacer(match) -> str:
-        num_str = match.group(0)
+        return False
+
+    def replace_float(match):
+        """Replace a float with its rounded version."""
+        start_pos = match.start()
+        end_pos = match.end()
+
+        # Check if we should skip this number
+        if should_skip_rounding(match, content, start_pos, end_pos):
+            return match.group(0)
+
+        # Parse and round the number
         try:
-            num = float(num_str)
-            return f"{num:.{digits}g}"
+            number = float(match.group(0))
+            # Use 'g' format for significant digits
+            rounded = f"{number:.{digits}g}"
+            return rounded
         except ValueError:
-            return num_str
+            # If we can't parse it, return as-is
+            return match.group(0)
 
-    rounded = number_pattern.sub(replacer, content_safe)
-
-    # Restore placeholders
-    for i, original in enumerate(placeholders):
-        rounded = rounded.replace(f"__PLACEHOLDER_{i}__", original)
-
-    return rounded
+    # Apply the replacement
+    result = re.sub(float_pattern, replace_float, content)
+    return result
