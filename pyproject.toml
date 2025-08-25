@@ -1,6 +1,6 @@
 [project]
 name = "pytest-snap"
-version = "0.2.1"
+version = "0.2.2"
 description = "A text-based snapshot testing library implemented as a pytest plugin"
 readme = "README.md"
 license = "MIT"
