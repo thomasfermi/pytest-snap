@@ -66,3 +66,9 @@ def test_round_with_ip_and_float_nearby():
 def test_german_dates():
     text = "Am 24.10.2024 habe ich Geburtstag"
     assert round_floats_in_text(text, 2) == text
+
+
+def test_round_for_very_long_str():
+    text = "this has IP 192.168.0.1 and e=1.1234"
+    long_text = "\n".join(100_000 * [text])
+    assert round_floats_in_text(long_text, 6) == long_text

@@ -4,88 +4,54 @@ import re
 def round_floats_in_text(content: str, digits: int) -> str:
     """
     Round floating point numbers in text to specified significant digits.
-
     Avoids rounding numbers that are part of:
     - IP addresses
     - Semantic versions
     - Timestamps/dates
     - URLs
     - Plain integers
-
     Note that this is a simple heuristic which will work well for many cases, but certainly not for all.
     Written by Claude Sonnet 4.0.
     """
+    combined_pattern = r"""
+        (?P<ip>\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)|
+        (?P<semver>\b\d+\.\d+\.\d+\b)|
+        (?P<iso_timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)|
+        (?P<date>\d{4}-\d{2}-\d{2})|
+        (?P<time>\d{2}:\d{2}:\d{2}(?:\.\d+)?)|
+        (?P<url>https?://[^\s]+)|
+        (?P<float>-?\d+\.?\d*(?:[eE][+-]?\d+)?)
+    """
 
-    # Pattern to match floating point numbers (including scientific notation)
-    # This matches:
-    # - Optional minus sign
-    # - One or more digits
-    # - Optional decimal point followed by digits
-    # - Optional scientific notation (e/E followed by optional +/- and digits)
-    float_pattern = r"-?\d+\.?\d*(?:[eE][+-]?\d+)?"
+    pattern = re.compile(combined_pattern, re.VERBOSE)
 
-    def should_skip_rounding(match, full_text, start_pos, end_pos):
-        """Check if this number should be skipped from rounding."""
+    result_parts = []
+    last_end = 0
 
-        # Check if it's actually a plain integer (no decimal point or scientific notation)
-        number_text = match.group(0)
-        if "." not in number_text and "e" not in number_text.lower():
-            return True
+    for match in pattern.finditer(content):
+        # Add text before this match
+        result_parts.append(content[last_end : match.start()])
+        if match.lastgroup == "float":
+            number_text = match.group("float")
 
-        # Find all IP addresses and check if our match overlaps
-        ip_pattern = r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"
-        for ip_match in re.finditer(ip_pattern, full_text):
-            # Check if our number is part of this IP address
-            if start_pos >= ip_match.start() and end_pos <= ip_match.end():
-                return True
+            # Skip if it's actually a plain integer
+            if "." not in number_text and "e" not in number_text.lower():
+                result_parts.append(number_text)
+            else:
+                # Try to round it
+                try:
+                    number = float(number_text)
+                    rounded = f"{number:.{digits}g}"
+                    result_parts.append(rounded)
+                except ValueError:
+                    result_parts.append(number_text)
+        else:
+            # This is an exclusion pattern - keep as-is
+            result_parts.append(match.group(0))
 
-        # Find all semantic versions and check if our match overlaps
-        semver_pattern = r"\b\d+\.\d+\.\d+\b"
-        for semver_match in re.finditer(semver_pattern, full_text):
-            # Check if our number is part of this semver
-            if start_pos >= semver_match.start() and end_pos <= semver_match.end():
-                return True
+        last_end = match.end()
 
-        # Find all timestamps/dates and check if our match overlaps
-        timestamp_patterns = [
-            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",  # ISO timestamp
-            r"\d{4}-\d{2}-\d{2}",  # Date
-            r"\d{2}:\d{2}:\d{2}(?:\.\d+)?",  # Time
-        ]
-        for pattern in timestamp_patterns:
-            for ts_match in re.finditer(pattern, full_text):
-                # Check if our number is part of this timestamp
-                if start_pos >= ts_match.start() and end_pos <= ts_match.end():
-                    return True
+    # Add remaining text
+    result_parts.append(content[last_end:])
 
-        # Find all URLs and check if our match overlaps
-        url_pattern = r"https?://[^\s]+"
-        for url_match in re.finditer(url_pattern, full_text):
-            # Check if our number is part of this URL
-            if start_pos >= url_match.start() and end_pos <= url_match.end():
-                return True
-
-        return False
-
-    def replace_float(match):
-        """Replace a float with its rounded version."""
-        start_pos = match.start()
-        end_pos = match.end()
-
-        # Check if we should skip this number
-        if should_skip_rounding(match, content, start_pos, end_pos):
-            return match.group(0)
-
-        # Parse and round the number
-        try:
-            number = float(match.group(0))
-            # Use 'g' format for significant digits
-            rounded = f"{number:.{digits}g}"
-            return rounded
-        except ValueError:
-            # If we can't parse it, return as-is
-            return match.group(0)
-
-    # Apply the replacement
-    result = re.sub(float_pattern, replace_float, content)
-    return result
+    return "".join(result_parts)
